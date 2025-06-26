@@ -133,25 +133,6 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
             opacity: 0;
             z-index: 1000;
         }}
-        .legend {{
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin: 10px 0;
-            padding: 10px;
-            background-color: #f8f9fa;
-            border-radius: 4px;
-        }}
-        .legend-item {{
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 12px;
-        }}
-        .legend-color {{
-            width: 16px;
-            height: 3px;
-        }}
         .stats {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -186,7 +167,6 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
         
         <div id="contigInfo" class="info" style="display: none;"></div>
         <div id="stats" class="stats" style="display: none;"></div>
-        <div id="legend" class="legend"></div>
         <div id="chart"></div>
         <div class="tooltip" id="tooltip"></div>
     </div>
@@ -289,9 +269,6 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
             
             // Draw heat map
             drawHeatMap(selectedContig, contigData, samples);
-            
-            // Update legend
-            updateLegend(samples);
         }}
         
         function getAllPositions(processedSamples) {{
@@ -330,18 +307,23 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
                 Math.max(...processedSamples[sample].map(d => d.coverage))
             ));
             
-            const colorScale = d3.scaleSequential(d3.interpolateViridis)
-                .domain([0, maxCoverage]);
+            // Use log scale for better coverage visualization
+            const minCoverage = Math.max(0.1, d3.min(samples.map(sample => 
+                d3.min(processedSamples[sample].filter(d => d.coverage > 0).map(d => d.coverage))
+            )));
+            
+            const colorScale = d3.scaleSequential(d3.interpolateBlues)
+                .domain([Math.log10(minCoverage), Math.log10(maxCoverage + 1)]);
             
             // Create SVG with different dimensions for heatmap
-            const heatmapHeight = samples.length * 30 + 100;
+            const heatmapHeight = samples.length * 30 + 120; // Extra space for legend
             const svg = d3.select('#chart')
                 .append('svg')
                 .attr('width', width + margin.left + margin.right)
                 .attr('height', heatmapHeight);
             
             const g = svg.append('g')
-                .attr('transform', `translate(${{margin.left}},50)`);
+                .attr('transform', `translate(${{margin.left}},70)`);
             
             const xScale = d3.scaleLinear()
                 .domain(d3.extent(allPositions))
@@ -367,7 +349,7 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
                         .attr('y', yScale(sample))
                         .attr('width', Math.max(1, xScale(bin.end) - xScale(bin.start)))
                         .attr('height', yScale.bandwidth())
-                        .attr('fill', avgCoverage > 0 ? colorScale(avgCoverage) : '#f0f0f0')
+                        .attr('fill', avgCoverage > 0 ? colorScale(Math.log10(avgCoverage + 0.1)) : '#f0f0f0')
                         .attr('stroke', 'none');
                 }});
             }});
@@ -399,13 +381,15 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
             const legendWidth = 180;
             const legendHeight = 10;
             const legend = svg.append('g')
-                .attr('transform', `translate(${{width - legendWidth + margin.left - 30}},20)`);
+                .attr('transform', `translate(${{width - legendWidth + margin.left - 30}},40)`);
             
             const legendScale = d3.scaleLinear()
-                .domain([0, maxCoverage])
+                .domain([Math.log10(minCoverage), Math.log10(maxCoverage + 1)])
                 .range([0, legendWidth]);
             
-            const legendAxis = d3.axisTop(legendScale).ticks(5);
+            const legendAxis = d3.axisTop(legendScale)
+                .ticks(5)
+                .tickFormat(d => Math.round(Math.pow(10, d)));
             
             // Create gradient
             const gradient = svg.append('defs')
@@ -415,10 +399,10 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
             
             const steps = 20;
             for (let i = 0; i <= steps; i++) {{
-                const value = (i / steps) * maxCoverage;
+                const logValue = Math.log10(minCoverage) + (i / steps) * (Math.log10(maxCoverage + 1) - Math.log10(minCoverage));
                 gradient.append('stop')
                     .attr('offset', `${{(i / steps) * 100}}%`)
-                    .attr('stop-color', colorScale(value));
+                    .attr('stop-color', colorScale(logValue));
             }}
             
             legend.append('rect')
@@ -431,33 +415,13 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
             
             legend.append('text')
                 .attr('x', legendWidth / 2)
-                .attr('y', -25)
+                .attr('y', -30)
                 .style('text-anchor', 'middle')
                 .style('font-size', '10px')
-                .text('Coverage');
+                .text('Coverage (log scale)');
         }}
         
 
-        function updateLegend(samples) {{
-            const legend = document.getElementById('legend');
-            legend.innerHTML = '';
-            
-            samples.forEach((sample, i) => {{
-                const item = document.createElement('div');
-                item.className = 'legend-item';
-                
-                const colorBox = document.createElement('div');
-                colorBox.className = 'legend-color';
-                colorBox.style.backgroundColor = colors(i);
-                
-                const label = document.createElement('span');
-                label.textContent = sample;
-                
-                item.appendChild(colorBox);
-                item.appendChild(label);
-                legend.appendChild(item);
-            }});
-        }}
     </script>
 </body>
 </html>"""
