@@ -1,0 +1,17 @@
+# Configuration for Interactive Contig Coverage Viewer
+# Edit these paths to point to your own data
+
+# Path to your assembly FASTA file
+fasta_path: "01_GEMM_057_contigs_5000bp.fasta"
+
+# Directory containing coverage BED files (.bed or .bed.gz)
+coverage_dir: "coverage_5000bp"
+
+# Output HTML file name
+output_path: "interactive_coverage_viewer.html"
+
+# Optional: Custom title for the visualization
+title: "Interactive Contig Coverage Viewer"
+
+# Optional: Dataset description (appears in the interface)
+dataset_name: "GEMM_057 Contigs (≥5000bp)"

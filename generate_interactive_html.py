@@ -4,7 +4,15 @@ import os
 import glob
 import gzip
 import json
+import sys
+import argparse
 from collections import defaultdict
+
+try:
+    import yaml
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
 
 def get_contigs_from_fasta(fasta_path):
     """Extract contig names from FASTA file"""
@@ -52,7 +60,7 @@ def load_all_coverage_data(coverage_dir):
     
     return dict(coverage_data)
 
-def generate_html(contigs, coverage_data, output_path):
+def generate_html(contigs, coverage_data, output_path, title="Interactive Contig Coverage Viewer", dataset_name="Contig Coverage Analysis"):
     """Generate interactive HTML with embedded data"""
     
     # Convert data to JSON strings
@@ -66,7 +74,7 @@ def generate_html(contigs, coverage_data, output_path):
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Contig Coverage Viewer</title>
+    <title>{title}</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         body {{
@@ -160,11 +168,11 @@ def generate_html(contigs, coverage_data, output_path):
 </head>
 <body>
     <div class="container">
-        <h1>Interactive Contig Coverage Viewer</h1>
+        <h1>{title}</h1>
         <div class="info">
-            <strong>Dataset:</strong> GEMM_057 Contigs (≥5000bp) | 
+            <strong>Dataset:</strong> {dataset_name} | 
             <strong>Contigs:</strong> {num_contigs} | 
-            <strong>Timepoints:</strong> {num_samples}
+            <strong>Samples:</strong> {num_samples}
         </div>
         
         <div class="controls">
@@ -457,25 +465,91 @@ def generate_html(contigs, coverage_data, output_path):
     with open(output_path, 'w') as f:
         f.write(html_content)
 
+def load_config(config_path="config.yaml"):
+    """Load configuration from YAML file or return defaults"""
+    default_config = {
+        'fasta_path': "01_GEMM_057_contigs_5000bp.fasta",
+        'coverage_dir': "coverage_5000bp",
+        'output_path': "interactive_coverage_viewer.html",
+        'title': "Interactive Contig Coverage Viewer",
+        'dataset_name': "Contig Coverage Analysis"
+    }
+    
+    if os.path.exists(config_path) and YAML_AVAILABLE:
+        print(f"Loading configuration from {config_path}")
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        # Merge with defaults
+        for key in default_config:
+            if key not in config:
+                config[key] = default_config[key]
+        return config
+    elif os.path.exists(config_path) and not YAML_AVAILABLE:
+        print(f"Warning: {config_path} found but PyYAML not installed. Using default configuration.")
+        print("Install PyYAML with: pip install pyyaml")
+        return default_config
+    else:
+        print(f"No config file found at {config_path}, using default configuration")
+        return default_config
+
 def main():
-    # Configuration
-    fasta_path = "01_GEMM_057_contigs_5000bp.fasta"
-    coverage_dir = "coverage_5000bp"
-    output_path = "interactive_coverage_viewer.html"
+    parser = argparse.ArgumentParser(description='Generate interactive contig coverage visualization')
+    parser.add_argument('--config', '-c', default='config.yaml', 
+                       help='Path to configuration file (default: config.yaml)')
+    parser.add_argument('--fasta', help='Path to assembly FASTA file (overrides config)')
+    parser.add_argument('--coverage-dir', help='Directory with coverage BED files (overrides config)')
+    parser.add_argument('--output', '-o', help='Output HTML file path (overrides config)')
+    parser.add_argument('--title', help='Title for the visualization (overrides config)')
+    parser.add_argument('--dataset-name', help='Dataset name for display (overrides config)')
+    
+    args = parser.parse_args()
+    
+    # Load configuration
+    config = load_config(args.config)
+    
+    # Override config with command line arguments
+    if args.fasta:
+        config['fasta_path'] = args.fasta
+    if args.coverage_dir:
+        config['coverage_dir'] = args.coverage_dir
+    if args.output:
+        config['output_path'] = args.output
+    if args.title:
+        config['title'] = args.title
+    if args.dataset_name:
+        config['dataset_name'] = args.dataset_name
+    
+    # Validate input files exist
+    if not os.path.exists(config['fasta_path']):
+        print(f"Error: FASTA file not found: {config['fasta_path']}")
+        sys.exit(1)
+    
+    if not os.path.exists(config['coverage_dir']):
+        print(f"Error: Coverage directory not found: {config['coverage_dir']}")
+        sys.exit(1)
+    
+    print(f"Configuration:")
+    print(f"  FASTA file: {config['fasta_path']}")
+    print(f"  Coverage directory: {config['coverage_dir']}")
+    print(f"  Output file: {config['output_path']}")
+    print(f"  Title: {config['title']}")
+    print(f"  Dataset: {config['dataset_name']}")
+    print()
     
     print("Loading contig names from FASTA...")
-    contigs = get_contigs_from_fasta(fasta_path)
+    contigs = get_contigs_from_fasta(config['fasta_path'])
     print(f"Found {len(contigs)} contigs")
     
     print("Loading coverage data...")
-    coverage_data = load_all_coverage_data(coverage_dir)
+    coverage_data = load_all_coverage_data(config['coverage_dir'])
     print(f"Loaded coverage data for {len(coverage_data)} contigs")
     
     print("Generating interactive HTML...")
-    generate_html(contigs, coverage_data, output_path)
+    generate_html(contigs, coverage_data, config['output_path'], 
+                 config['title'], config['dataset_name'])
     
-    print(f"✓ Interactive HTML generated: {output_path}")
-    print(f"Open {output_path} in your web browser to view the interactive coverage plots!")
+    print(f"✓ Interactive HTML generated: {config['output_path']}")
+    print(f"Open {config['output_path']} in your web browser to view the interactive coverage plots!")
 
 if __name__ == "__main__":
     main()

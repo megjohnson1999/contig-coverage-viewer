@@ -51,3 +51,7 @@ interactive_coverage.py
 interactive_coverage_dash.py
 matplotlib_interactive_coverage.py
 static_coverage_viewer.py
+
+# Keep config.yaml as an example but ignore user-specific configs
+config_*.yaml
+my_*.yaml

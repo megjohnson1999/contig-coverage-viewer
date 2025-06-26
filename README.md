@@ -20,13 +20,17 @@ This tool helps evaluate metagenomic assemblies by showing which samples contrib
    - FASTA file with contigs
    - Per-base coverage files (`.bed` or `.bed.gz` format)
 
-2. **Generate the viewer**:
+2. **Configure file paths**:
+   - Edit `config.yaml` with your file paths, OR
+   - Use command line arguments (see Usage section)
+
+3. **Generate the viewer**:
    ```bash
    python generate_interactive_html.py
    ```
 
-3. **Open the visualization**:
-   - Open `interactive_coverage_viewer.html` in your web browser
+4. **Open the visualization**:
+   - Open the generated HTML file in your web browser
    - Select a contig from the dropdown to view its coverage
 
 ## Input Data Format
@@ -52,20 +56,48 @@ k127_559       119      162    3.0
 
 ## Usage
 
-### Basic Usage
+### Configuration File (Recommended)
+Create or edit `config.yaml`:
+```yaml
+# Path to your assembly FASTA file
+fasta_path: "path/to/your_assembly.fasta"
+
+# Directory containing coverage BED files
+coverage_dir: "path/to/coverage_files"
+
+# Output HTML file name
+output_path: "my_coverage_viewer.html"
+
+# Optional: Custom title and dataset name
+title: "My Metagenomic Coverage Analysis"
+dataset_name: "My Assembly v1.0"
+```
+
+Then run:
 ```bash
-# Default settings (modify paths in script if needed)
 python generate_interactive_html.py
 ```
 
-### Customizing File Paths
-Edit the configuration section in `generate_interactive_html.py`:
-```python
-# Configuration
-fasta_path = "your_assembly.fasta"
-coverage_dir = "your_coverage_directory"
-output_path = "your_output.html"
+### Command Line Arguments
+Override config file settings or skip config file entirely:
+```bash
+# Basic usage with custom paths
+python generate_interactive_html.py --fasta my_assembly.fasta --coverage-dir my_coverage --output my_viewer.html
+
+# Use different config file
+python generate_interactive_html.py --config my_config.yaml
+
+# Override specific settings
+python generate_interactive_html.py --title "My Analysis" --dataset-name "Experiment 1"
+
+# See all options
+python generate_interactive_html.py --help
 ```
+
+### Without Configuration File
+The tool works without `config.yaml` - it will use default paths and look for:
+- `01_GEMM_057_contigs_5000bp.fasta`
+- `coverage_5000bp/` directory
 
 ## Output
 
@@ -100,9 +132,12 @@ output_path = "your_output.html"
 ## Technical Details
 
 ### Dependencies
-- **Python packages**: `os`, `glob`, `gzip`, `json`, `collections` (all standard library)
+- **Required**: Python 3.6+ with standard library (`os`, `glob`, `gzip`, `json`, `collections`, `argparse`)
+- **Optional**: PyYAML for configuration file support (`pip install pyyaml`)
 - **Visualization**: D3.js (loaded from CDN)
 - **Browser**: Any modern web browser with JavaScript enabled
+
+**Note**: The tool works without PyYAML but you'll need to use command line arguments instead of config files.
 
 ### Performance Considerations
 - **Binning**: Contigs with >1000 positions are automatically binned for browser performance
