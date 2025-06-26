@@ -1,0 +1,481 @@
+#!/usr/bin/env python3
+
+import os
+import glob
+import gzip
+import json
+from collections import defaultdict
+
+def get_contigs_from_fasta(fasta_path):
+    """Extract contig names from FASTA file"""
+    contigs = []
+    with open(fasta_path, 'r') as f:
+        for line in f:
+            if line.startswith('>'):
+                contig_name = line[1:].split()[0]  # Get just the contig name
+                contigs.append(contig_name)
+    return contigs
+
+def load_all_coverage_data(coverage_dir):
+    """Load all coverage data from BED files"""
+    files = glob.glob(os.path.join(coverage_dir, "*.per-base.bed.gz"))
+    coverage_data = defaultdict(lambda: defaultdict(list))
+    
+    print(f"Processing {len(files)} coverage files...")
+    
+    for i, file_path in enumerate(files):
+        # Extract sample name from filename
+        sample_name = os.path.basename(file_path).split(".")[0]
+        # Extract timepoint (like 12M_hr)
+        parts = sample_name.split("_")
+        timepoint = f"{parts[-2]}_{parts[-1]}"
+        
+        print(f"Processing {timepoint}... ({i+1}/{len(files)})")
+        
+        with gzip.open(file_path, 'rt') as f:
+            for line in f:
+                parts = line.strip().split('\t')
+                if len(parts) >= 4:
+                    contig, start, end, coverage = parts[:4]
+                    start = int(start)
+                    coverage = float(coverage)
+                    
+                    coverage_data[contig][timepoint].append({
+                        'position': start,
+                        'coverage': coverage
+                    })
+    
+    # Sort all coverage data by position
+    for contig in coverage_data:
+        for sample in coverage_data[contig]:
+            coverage_data[contig][sample].sort(key=lambda x: x['position'])
+    
+    return dict(coverage_data)
+
+def generate_html(contigs, coverage_data, output_path):
+    """Generate interactive HTML with embedded data"""
+    
+    # Convert data to JSON strings
+    contigs_json = json.dumps(contigs)
+    coverage_json = json.dumps(coverage_data)
+    num_contigs = len(contigs)
+    num_samples = len(set(sample for contig_data in coverage_data.values() for sample in contig_data.keys()))
+    
+    html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Contig Coverage Viewer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {{
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }}
+        .controls {{
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }}
+        select {{
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            min-width: 200px;
+        }}
+        .info {{
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            font-size: 14px;
+        }}
+        #chart {{
+            margin: 20px 0;
+        }}
+        .tooltip {{
+            position: absolute;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 4px;
+            pointer-events: none;
+            font-size: 12px;
+            opacity: 0;
+            z-index: 1000;
+        }}
+        .legend {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }}
+        .legend-item {{
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+        }}
+        .legend-color {{
+            width: 16px;
+            height: 3px;
+        }}
+        .stats {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }}
+        .stat-item {{
+            background-color: #e9ecef;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Contig Coverage Viewer</h1>
+        <div class="info">
+            <strong>Dataset:</strong> GEMM_057 Contigs (≥5000bp) | 
+            <strong>Contigs:</strong> {num_contigs} | 
+            <strong>Timepoints:</strong> {num_samples}
+        </div>
+        
+        <div class="controls">
+            <div>
+                <label for="contigSelect">Select Contig:</label>
+                <select id="contigSelect">
+                    <option value="">Choose a contig...</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="contigInfo" class="info" style="display: none;"></div>
+        <div id="stats" class="stats" style="display: none;"></div>
+        <div id="legend" class="legend"></div>
+        <div id="chart"></div>
+        <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <script>
+        // Embedded data
+        const contigs = {contigs_json};
+        const coverageData = {coverage_json};
+        
+        const colors = d3.scaleOrdinal(d3.schemeSet3);
+        const margin = {{top: 20, right: 100, bottom: 60, left: 80}};
+        const width = 1200 - margin.left - margin.right;
+        const height = 450 - margin.top - margin.bottom;
+
+        // Initialize
+        populateContigSelect();
+        document.getElementById('contigSelect').addEventListener('change', updateChart);
+
+        function populateContigSelect() {{
+            const select = document.getElementById('contigSelect');
+            contigs.forEach(contig => {{
+                const option = document.createElement('option');
+                option.value = contig;
+                option.textContent = contig;
+                select.appendChild(option);
+            }});
+        }}
+
+        function smoothData(data, windowSize) {{
+            if (windowSize <= 1) return data;
+            
+            const smoothed = [];
+            for (let i = 0; i < data.length; i++) {{
+                let sum = 0;
+                let count = 0;
+                const start = Math.max(0, i - Math.floor(windowSize/2));
+                const end = Math.min(data.length - 1, i + Math.floor(windowSize/2));
+                
+                for (let j = start; j <= end; j++) {{
+                    sum += data[j].coverage;
+                    count++;
+                }}
+                
+                smoothed.push({{
+                    position: data[i].position,
+                    coverage: sum / count
+                }});
+            }}
+            return smoothed;
+        }}
+
+        function calculateStats(data) {{
+            const values = data.map(d => d.coverage);
+            const sum = values.reduce((a, b) => a + b, 0);
+            const mean = sum / values.length;
+            const sorted = [...values].sort((a, b) => a - b);
+            const median = sorted[Math.floor(sorted.length / 2)];
+            const max = Math.max(...values);
+            
+            return {{ mean, median, max, length: values.length }};
+        }}
+
+        function updateChart() {{
+            const selectedContig = document.getElementById('contigSelect').value;
+            
+            if (!selectedContig || !coverageData[selectedContig]) {{
+                document.getElementById('chart').innerHTML = '';
+                document.getElementById('contigInfo').style.display = 'none';
+                document.getElementById('stats').style.display = 'none';
+                document.getElementById('legend').innerHTML = '';
+                return;
+            }}
+            
+            const contigData = coverageData[selectedContig];
+            const samples = Object.keys(contigData).sort();
+            
+            // Show contig info
+            const maxPosition = Math.max(...samples.map(sample => 
+                Math.max(...contigData[sample].map(d => d.position))
+            ));
+            document.getElementById('contigInfo').innerHTML = 
+                `<strong>Contig:</strong> ${{selectedContig}} | <strong>Length:</strong> ${{maxPosition.toLocaleString()}} bp | <strong>Samples:</strong> ${{samples.length}}`;
+            document.getElementById('contigInfo').style.display = 'block';
+            
+            // Calculate and show stats
+            const statsDiv = document.getElementById('stats');
+            statsDiv.innerHTML = '';
+            samples.forEach(sample => {{
+                const stats = calculateStats(contigData[sample]);
+                const statItem = document.createElement('div');
+                statItem.className = 'stat-item';
+                statItem.innerHTML = `<strong>${{sample}}</strong><br>
+                    Mean: ${{stats.mean.toFixed(2)}} | Median: ${{stats.median.toFixed(2)}} | Max: ${{stats.max.toFixed(2)}}`;
+                statsDiv.appendChild(statItem);
+            }});
+            statsDiv.style.display = 'grid';
+            
+            // Clear previous chart
+            d3.select('#chart').selectAll('*').remove();
+            
+            // Draw heat map
+            drawHeatMap(selectedContig, contigData, samples);
+            
+            // Update legend
+            updateLegend(samples);
+        }}
+        
+        function getAllPositions(processedSamples) {{
+            const allPositions = new Set();
+            Object.values(processedSamples).forEach(data => {{
+                data.forEach(d => allPositions.add(d.position));
+            }});
+            return Array.from(allPositions).sort((a, b) => a - b);
+        }}
+        
+        function getCoverageAtPosition(sampleData, position) {{
+            const point = sampleData.find(d => d.position === position);
+            return point ? point.coverage : 0;
+        }}
+        
+        function drawHeatMap(selectedContig, contigData, samples) {{
+            const processedSamples = {{}};
+            samples.forEach(sample => {{
+                processedSamples[sample] = contigData[sample];  // Use raw data without smoothing
+            }});
+            
+            const allPositions = getAllPositions(processedSamples);
+            const binSize = Math.max(1, Math.floor(allPositions.length / 1000)); // Limit to ~1000 bins for performance
+            
+            // Create binned data
+            const binnedPositions = [];
+            for (let i = 0; i < allPositions.length; i += binSize) {{
+                const binStart = allPositions[i];
+                const binEnd = allPositions[Math.min(i + binSize - 1, allPositions.length - 1)];
+                const binCenter = (binStart + binEnd) / 2;
+                binnedPositions.push({{ start: binStart, end: binEnd, center: binCenter }});
+            }}
+            
+            // Calculate max coverage for color scaling
+            const maxCoverage = Math.max(...samples.map(sample => 
+                Math.max(...processedSamples[sample].map(d => d.coverage))
+            ));
+            
+            const colorScale = d3.scaleSequential(d3.interpolateViridis)
+                .domain([0, maxCoverage]);
+            
+            // Create SVG with different dimensions for heatmap
+            const heatmapHeight = samples.length * 30 + 100;
+            const svg = d3.select('#chart')
+                .append('svg')
+                .attr('width', width + margin.left + margin.right)
+                .attr('height', heatmapHeight);
+            
+            const g = svg.append('g')
+                .attr('transform', `translate(${{margin.left}},50)`);
+            
+            const xScale = d3.scaleLinear()
+                .domain(d3.extent(allPositions))
+                .range([0, width]);
+            
+            const yScale = d3.scaleBand()
+                .domain(samples)
+                .range([0, samples.length * 30])
+                .padding(0.1);
+            
+            // Draw heatmap rectangles
+            samples.forEach(sample => {{
+                binnedPositions.forEach(bin => {{
+                    // Calculate average coverage for this bin
+                    const relevantPoints = processedSamples[sample].filter(d => 
+                        d.position >= bin.start && d.position <= bin.end
+                    );
+                    const avgCoverage = relevantPoints.length > 0 ? 
+                        relevantPoints.reduce((sum, d) => sum + d.coverage, 0) / relevantPoints.length : 0;
+                    
+                    g.append('rect')
+                        .attr('x', xScale(bin.start))
+                        .attr('y', yScale(sample))
+                        .attr('width', Math.max(1, xScale(bin.end) - xScale(bin.start)))
+                        .attr('height', yScale.bandwidth())
+                        .attr('fill', avgCoverage > 0 ? colorScale(avgCoverage) : '#f0f0f0')
+                        .attr('stroke', 'none');
+                }});
+            }});
+            
+            // Add axes
+            g.append('g')
+                .attr('transform', `translate(0,${{samples.length * 30}})`)
+                .call(d3.axisBottom(xScale).tickFormat(d => d.toLocaleString()));
+            
+            g.append('g')
+                .call(d3.axisLeft(yScale));
+            
+            // Add axis labels
+            g.append('text')
+                .attr('transform', `translate(${{width/2}},${{samples.length * 30 + 40}})`)
+                .style('text-anchor', 'middle')
+                .style('font-size', '12px')
+                .text('Position (bp)');
+            
+            g.append('text')
+                .attr('transform', 'rotate(-90)')
+                .attr('y', -60)
+                .attr('x', -(samples.length * 15))
+                .style('text-anchor', 'middle')
+                .style('font-size', '12px')
+                .text('Samples');
+            
+            // Add color scale legend
+            const legendWidth = 200;
+            const legendHeight = 10;
+            const legend = svg.append('g')
+                .attr('transform', `translate(${{width - legendWidth + margin.left}},10)`);
+            
+            const legendScale = d3.scaleLinear()
+                .domain([0, maxCoverage])
+                .range([0, legendWidth]);
+            
+            const legendAxis = d3.axisTop(legendScale).ticks(5);
+            
+            // Create gradient
+            const gradient = svg.append('defs')
+                .append('linearGradient')
+                .attr('id', 'coverage-gradient')
+                .attr('x1', '0%').attr('x2', '100%');
+            
+            const steps = 20;
+            for (let i = 0; i <= steps; i++) {{
+                const value = (i / steps) * maxCoverage;
+                gradient.append('stop')
+                    .attr('offset', `${{(i / steps) * 100}}%`)
+                    .attr('stop-color', colorScale(value));
+            }}
+            
+            legend.append('rect')
+                .attr('width', legendWidth)
+                .attr('height', legendHeight)
+                .style('fill', 'url(#coverage-gradient)');
+            
+            legend.append('g')
+                .call(legendAxis);
+            
+            legend.append('text')
+                .attr('x', legendWidth / 2)
+                .attr('y', -25)
+                .style('text-anchor', 'middle')
+                .style('font-size', '10px')
+                .text('Coverage');
+        }}
+        
+
+        function updateLegend(samples) {{
+            const legend = document.getElementById('legend');
+            legend.innerHTML = '';
+            
+            samples.forEach((sample, i) => {{
+                const item = document.createElement('div');
+                item.className = 'legend-item';
+                
+                const colorBox = document.createElement('div');
+                colorBox.className = 'legend-color';
+                colorBox.style.backgroundColor = colors(i);
+                
+                const label = document.createElement('span');
+                label.textContent = sample;
+                
+                item.appendChild(colorBox);
+                item.appendChild(label);
+                legend.appendChild(item);
+            }});
+        }}
+    </script>
+</body>
+</html>"""
+    
+    with open(output_path, 'w') as f:
+        f.write(html_content)
+
+def main():
+    # Configuration
+    fasta_path = "01_GEMM_057_contigs_5000bp.fasta"
+    coverage_dir = "coverage_5000bp"
+    output_path = "interactive_coverage_viewer.html"
+    
+    print("Loading contig names from FASTA...")
+    contigs = get_contigs_from_fasta(fasta_path)
+    print(f"Found {len(contigs)} contigs")
+    
+    print("Loading coverage data...")
+    coverage_data = load_all_coverage_data(coverage_dir)
+    print(f"Loaded coverage data for {len(coverage_data)} contigs")
+    
+    print("Generating interactive HTML...")
+    generate_html(contigs, coverage_data, output_path)
+    
+    print(f"✓ Interactive HTML generated: {output_path}")
+    print(f"Open {output_path} in your web browser to view the interactive coverage plots!")
+
+if __name__ == "__main__":
+    main()

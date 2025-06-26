@@ -1,0 +1,53 @@
+# Data files (keep private)
+*.fasta
+*.fasta.fai
+*.bed
+*.bed.gz
+*.bam
+*.bam.bai
+coverage_*/
+mapped_bams_*/
+
+# Python environments
+coverage_viz_env/
+venv/
+env/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Jupyter notebooks (if any)
+*.ipynb
+.ipynb_checkpoints/
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Other Python scripts (keep only the main one)
+interactive_coverage.py
+interactive_coverage_dash.py
+matplotlib_interactive_coverage.py
+static_coverage_viewer.py
