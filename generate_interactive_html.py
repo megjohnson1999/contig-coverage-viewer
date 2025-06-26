@@ -396,10 +396,10 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
                 .text('Samples');
             
             // Add color scale legend
-            const legendWidth = 200;
+            const legendWidth = 180;
             const legendHeight = 10;
             const legend = svg.append('g')
-                .attr('transform', `translate(${{width - legendWidth + margin.left}},10)`);
+                .attr('transform', `translate(${{width - legendWidth + margin.left - 30}},20)`);
             
             const legendScale = d3.scaleLinear()
                 .domain([0, maxCoverage])
