@@ -6,6 +6,28 @@ An interactive browser-based tool for visualizing metagenomic contig coverage ac
 
 This tool helps evaluate metagenomic assemblies by showing which samples contributed reads to each contig. It displays per-base coverage data as an interactive heat map where each row represents a sample and colors indicate coverage intensity.
 
+### What the visualization shows:
+```
+                    Genomic Position (bp)
+Sample      0    1000   2000   3000   4000   5000
+12M_hr   [████████████████████████████████████████] High coverage
+18M_hr   [██████████████████░░░░░░░░░░░░░░░░░░░░░░░] Partial coverage  
+24M_hr   [████████████████████████████████████████] High coverage
+30M_hr   [░░░░░░░░░░░░░░░░░░░░████████████████████] Late coverage
+36M_hr   [████████████████████████████████████████] High coverage
+48M_hr   [██████████████████████████░░░░░░░░░░░░░░] Partial coverage
+60M_hr   [████████████████████████████████████████] High coverage
+
+Legend: █ High coverage  ░ Low/no coverage
+```
+*Example pattern showing how different timepoints contribute coverage across a contig*
+
+**Interactive features:**
+- **Heat map rows**: Each sample/timepoint (12M_hr, 18M_hr, 24M_hr, etc.)  
+- **Heat map columns**: Genomic positions along the contig
+- **Colors**: Coverage intensity (purple = low/none, yellow = high)
+- **Hover tooltips**: Show exact coverage values at each position
+
 ## Features
 
 - **Interactive heat map visualization** - Clear view of coverage patterns across contig positions
@@ -32,6 +54,20 @@ This tool helps evaluate metagenomic assemblies by showing which samples contrib
 4. **Open the visualization**:
    - Open the generated HTML file in your web browser
    - Select a contig from the dropdown to view its coverage
+
+## Example Output
+
+The tool generates a self-contained HTML file with an interactive interface:
+
+<!-- Add screenshot: ![Interface Screenshot](interface_screenshot.png) -->
+<!-- *The clean interface shows contig selection, coverage statistics, and the interactive heat map with color legend.* -->
+
+**Key interface elements:**
+- **Contig dropdown**: Select from 91 available contigs
+- **Coverage statistics**: Mean, median, max coverage per sample  
+- **Interactive heat map**: Zoom and hover for details
+- **Color legend**: Coverage intensity scale
+- **Sample information**: Shows dataset name and sample count
 
 ## Input Data Format
 
