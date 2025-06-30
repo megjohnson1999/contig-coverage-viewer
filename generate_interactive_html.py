@@ -178,18 +178,34 @@ def generate_html(contigs, coverage_data, output_path, title="Interactive Contig
         const width = 1200 - margin.left - margin.right;
         const height = 450 - margin.top - margin.bottom;
 
-        // Initialize
-        populateContigSelect();
-        document.getElementById('contigSelect').addEventListener('change', updateChart);
+        // Initialize when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {{
+            populateContigSelect();
+            document.getElementById('contigSelect').addEventListener('change', updateChart);
+        }});
 
         function populateContigSelect() {{
+            console.log('Populating contig dropdown with', contigs.length, 'contigs');
             const select = document.getElementById('contigSelect');
+            
+            if (!select) {{
+                console.error('Select element with id "contigSelect" not found!');
+                return;
+            }}
+            
+            if (!contigs || contigs.length === 0) {{
+                console.error('No contigs data available!');
+                return;
+            }}
+            
             contigs.forEach(contig => {{
                 const option = document.createElement('option');
                 option.value = contig;
                 option.textContent = contig;
                 select.appendChild(option);
             }});
+            
+            console.log('Successfully added', contigs.length, 'contig options to dropdown');
         }}
 
         function smoothData(data, windowSize) {{
