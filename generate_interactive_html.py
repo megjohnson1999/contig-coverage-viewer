@@ -32,13 +32,10 @@ def load_all_coverage_data(coverage_dir):
     print(f"Processing {len(files)} coverage files...")
     
     for i, file_path in enumerate(files):
-        # Extract sample name from filename
-        sample_name = os.path.basename(file_path).split(".")[0]
-        # Extract timepoint (like 12M_hr)
-        parts = sample_name.split("_")
-        timepoint = f"{parts[-2]}_{parts[-1]}"
+        # Extract sample name from filename (use full filename minus extensions)
+        sample_name = os.path.basename(file_path).split(".per-base.bed.gz")[0]
         
-        print(f"Processing {timepoint}... ({i+1}/{len(files)})")
+        print(f"Processing {sample_name}... ({i+1}/{len(files)})")
         
         with gzip.open(file_path, 'rt') as f:
             for line in f:
@@ -48,7 +45,7 @@ def load_all_coverage_data(coverage_dir):
                     start = int(start)
                     coverage = float(coverage)
                     
-                    coverage_data[contig][timepoint].append({
+                    coverage_data[contig][sample_name].append({
                         'position': start,
                         'coverage': coverage
                     })
