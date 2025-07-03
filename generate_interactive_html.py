@@ -24,8 +24,8 @@ def get_contigs_from_fasta(fasta_path):
                 contigs.append(contig_name)
     return contigs
 
-def load_all_coverage_data(coverage_dir):
-    """Load all coverage data from BED files"""
+def _load_raw_coverage_data(coverage_dir):
+    """Load raw coverage data from BED files without filtering"""
     files = glob.glob(os.path.join(coverage_dir, "*.per-base.bed.gz"))
     coverage_data = defaultdict(lambda: defaultdict(list))
     
@@ -56,6 +56,46 @@ def load_all_coverage_data(coverage_dir):
             coverage_data[contig][sample].sort(key=lambda x: x['position'])
     
     return dict(coverage_data)
+
+def load_all_coverage_data(coverage_dir, min_mean_coverage=None, min_max_coverage=None):
+    """Load all coverage data from BED files and optionally filter samples by coverage thresholds"""
+    # Load raw data first
+    coverage_data = _load_raw_coverage_data(coverage_dir)
+    
+    # If no filtering requested, return raw data (backward compatibility)
+    if min_mean_coverage is None and min_max_coverage is None:
+        return coverage_data
+    
+    # Apply filtering if thresholds are specified
+    min_mean_coverage = min_mean_coverage or 0.0
+    min_max_coverage = min_max_coverage or 0.0
+    
+    print(f"Filtering samples with mean coverage >= {min_mean_coverage} and max coverage >= {min_max_coverage}")
+    
+    filtered_data = defaultdict(dict)
+    total_samples_before = 0
+    total_samples_after = 0
+    
+    for contig in coverage_data:
+        for sample in coverage_data[contig]:
+            total_samples_before += 1
+            coverages = [d['coverage'] for d in coverage_data[contig][sample]]
+            
+            if not coverages:  # Skip empty coverage data
+                continue
+                
+            mean_coverage = sum(coverages) / len(coverages)
+            max_coverage = max(coverages)
+            
+            # Apply filtering thresholds
+            if mean_coverage >= min_mean_coverage and max_coverage >= min_max_coverage:
+                filtered_data[contig][sample] = coverage_data[contig][sample]
+                total_samples_after += 1
+    
+    print(f"Filtered {total_samples_before} sample-contig pairs to {total_samples_after} pairs")
+    print(f"Removed {total_samples_before - total_samples_after} low-coverage sample-contig pairs")
+    
+    return dict(filtered_data)
 
 def generate_html(contigs, coverage_data, output_path, title="Interactive Contig Coverage Viewer", dataset_name="Contig Coverage Analysis"):
     """Generate interactive HTML with embedded data"""
@@ -449,7 +489,9 @@ def load_config(config_path="config.yaml"):
         'coverage_dir': "coverage_5000bp",
         'output_path': "interactive_coverage_viewer.html",
         'title': "Interactive Contig Coverage Viewer",
-        'dataset_name': "Contig Coverage Analysis"
+        'dataset_name': "Contig Coverage Analysis",
+        'min_mean_coverage': 1.0,
+        'min_max_coverage': 5.0
     }
     
     if os.path.exists(config_path) and YAML_AVAILABLE:
@@ -478,6 +520,10 @@ def main():
     parser.add_argument('--output', '-o', help='Output HTML file path (overrides config)')
     parser.add_argument('--title', help='Title for the visualization (overrides config)')
     parser.add_argument('--dataset-name', help='Dataset name for display (overrides config)')
+    parser.add_argument('--min-mean-coverage', type=float, default=1.0,
+                       help='Minimum mean coverage threshold for sample filtering (default: 1.0)')
+    parser.add_argument('--min-max-coverage', type=float, default=5.0,
+                       help='Minimum max coverage threshold for sample filtering (default: 5.0)')
     
     args = parser.parse_args()
     
@@ -495,6 +541,10 @@ def main():
         config['title'] = args.title
     if args.dataset_name:
         config['dataset_name'] = args.dataset_name
+    
+    # Use command line filtering parameters if provided, otherwise use config
+    min_mean_coverage = args.min_mean_coverage if args.min_mean_coverage != 1.0 else config.get('min_mean_coverage', 1.0)
+    min_max_coverage = args.min_max_coverage if args.min_max_coverage != 5.0 else config.get('min_max_coverage', 5.0)
     
     # Validate input files exist
     if not os.path.exists(config['fasta_path']):
@@ -518,11 +568,22 @@ def main():
     print(f"Found {len(contigs)} contigs")
     
     print("Loading coverage data...")
-    coverage_data = load_all_coverage_data(config['coverage_dir'])
+    coverage_data = load_all_coverage_data(config['coverage_dir'], 
+                                          min_mean_coverage, 
+                                          min_max_coverage)
     print(f"Loaded coverage data for {len(coverage_data)} contigs")
     
+    # Filter contigs to only include those with coverage data
+    contigs_with_data = [contig for contig in contigs if contig in coverage_data and coverage_data[contig]]
+    print(f"Contigs with coverage data after filtering: {len(contigs_with_data)}")
+    
+    if len(contigs_with_data) == 0:
+        print("Warning: No contigs have coverage data after filtering!")
+        print("Try reducing the filtering thresholds with --min-mean-coverage and --min-max-coverage")
+        return
+    
     print("Generating interactive HTML...")
-    generate_html(contigs, coverage_data, config['output_path'], 
+    generate_html(contigs_with_data, coverage_data, config['output_path'], 
                  config['title'], config['dataset_name'])
     
     print(f"✓ Interactive HTML generated: {config['output_path']}")
